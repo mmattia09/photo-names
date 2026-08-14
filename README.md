@@ -56,12 +56,32 @@ Build a package and install that:
 npm install && npm run build
 ```
 
-The `.zip` lands in `web-ext-artifacts/`. Firefox only installs signed
-extensions, so either sign it for yourself with
-[`web-ext sign`](https://extensionworkshop.com/documentation/develop/web-ext-command-reference/#web-ext-sign)
-and a [Mozilla add-on API key](https://addons.mozilla.org/developers/addon/api/key/),
-or run [Firefox Developer Edition](https://www.mozilla.org/firefox/developer/)
-with `xpinstall.signatures.required` set to `false`.
+The `.zip` lands in `web-ext-artifacts/`; rename it to `.xpi` to install it.
+Firefox will not take it unsigned, and there are two ways past that.
+
+**Turn signature checking off.** Only works where the build did not hardcode it
+— Developer Edition, Nightly, ESR, and forks such as Zen and LibreWolf, which
+ship `MOZ_REQUIRE_SIGNING` false but still set the pref to `true` by default.
+Set `xpinstall.signatures.required` to `false` in `about:config`, then install
+the `.xpi` from `about:addons`. Release builds ignore the pref.
+
+**Or sign it.** Get a [Mozilla add-on API key](https://addons.mozilla.org/developers/addon/api/key/)
+and:
+
+```bash
+export WEB_EXT_API_KEY=…       # the JWT issuer
+export WEB_EXT_API_SECRET=…    # the JWT secret
+npm run sign
+```
+
+That is `--channel=unlisted`: the package is uploaded to Mozilla for automated
+review and signing, but gets no listing on addons.mozilla.org and stays out of
+search. The signed `.xpi` comes back to `web-ext-artifacts/` and installs
+anywhere, no pref needed.
+
+Signing binds the add-on id in `manifest.json` to the account that first submits
+it, permanently, and refuses a version number it has already seen — so bump
+`version` before signing again.
 
 ## Settings
 
@@ -109,6 +129,7 @@ npm install
 npm run lint    # web-ext lint
 npm start       # a scratch Firefox profile with the extension loaded
 npm run build   # package into web-ext-artifacts/
+npm run sign    # same, signed by Mozilla (unlisted); needs WEB_EXT_API_* set
 ```
 
 The whole extension is four small files under [`src/`](src): a background script
