@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Photo Names — settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Photo Names</h1>
+      <p class="lede">
+        The address of your Immich instance. The button only appears there, and the extension
+        asks for access to that one host — nothing else.
+      </p>
+
+      <form id="settings">
+        <label for="url">Immich address</label>
+        <input
+          id="url"
+          name="url"
+          type="text"
+          inputmode="url"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="https://photos.example.com"
+        />
+        <p class="hint">
+          Include the port if it is not the default one. Without a scheme, local addresses are
+          taken as <code>http://</code> and everything else as <code>https://</code>.
+        </p>
+        <button type="submit">Save and grant access</button>
+      </form>
+
+      <p id="status" role="status"></p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

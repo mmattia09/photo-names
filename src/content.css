@@ -1,0 +1,58 @@
+/* Immich lays the description out with Tailwind utilities; these rules only add
+   room for the button and paint the button itself, so nothing else moves. */
+
+.photo-names-holder {
+  position: relative;
+}
+
+.photo-names-textarea {
+  padding-right: 2.5rem !important;
+}
+
+.photo-names-button {
+  position: absolute;
+  top: 0.35rem;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.photo-names-button:hover,
+.photo-names-button:focus-visible {
+  opacity: 1;
+  background: rgb(128 128 128 / 0.18);
+}
+
+.photo-names-button[data-state="busy"] {
+  opacity: 0.35;
+  cursor: progress;
+}
+
+.photo-names-button[data-state="done"] {
+  opacity: 1;
+  color: #2f9e44;
+}
+
+.photo-names-button[data-state="error"] {
+  opacity: 1;
+  color: #e03131;
+}
+
+.photo-names-button svg {
+  display: block;
+  pointer-events: none;
+}

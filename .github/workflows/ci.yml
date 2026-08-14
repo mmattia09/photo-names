@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  lint:
+    name: web-ext lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The manifest is the part with no runtime to catch it: a permission or a
+      # minimum version that Firefox does not accept only shows up at install.
+      - name: Lint
+        run: npx --yes web-ext@8 lint --source-dir=.
