@@ -56,3 +56,55 @@
   display: block;
   pointer-events: none;
 }
+
+/* --- quick add ------------------------------------------------------------ */
+
+/* The toggle borrows Immich's own button classes, so only the on-state is ours. */
+.photo-names-quick-toggle[data-active="true"] {
+  background: rgb(66 80 175 / 0.9);
+  color: #fff;
+}
+
+html.photo-names-quick,
+html.photo-names-quick #immich-asset-viewer img {
+  cursor: crosshair;
+}
+
+/* While a drawn box is waiting for a name, Immich's own box would sit over the
+   photo in a different place and say the wrong thing. */
+html.photo-names-tagging .canvas-container {
+  display: none !important;
+}
+
+.photo-names-band {
+  position: fixed;
+  z-index: 2147483646;
+  pointer-events: none;
+  border: 2px solid #8b95f0;
+  border-radius: 2px;
+  background: rgb(139 149 240 / 0.16);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.55);
+}
+
+.photo-names-hint {
+  position: fixed;
+  z-index: 2147483647;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.45rem 0.9rem;
+  border-radius: 9999px;
+  background: rgb(20 20 22 / 0.92);
+  color: #f4f4f5;
+  font: 500 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Immich's tooltip classes carry the looks; only the placement is ours, since
+   bits-ui positions the real ones from a wrapper we are not inside of. */
+.photo-names-tip {
+  position: fixed;
+  z-index: 2147483000;
+  pointer-events: none;
+}

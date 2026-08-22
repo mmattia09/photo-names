@@ -8,6 +8,9 @@
  */
 
 const SCRIPT_ID = "photo-names-immich";
+/** The fetch patch has to live in the page's own world to be seen by Immich. */
+const PAGE_SCRIPT_ID = "photo-names-immich-page";
+const SCRIPT_IDS = [SCRIPT_ID, PAGE_SCRIPT_ID];
 
 /**
  * Match patterns cannot carry a port, so an instance on a non-standard port
@@ -31,10 +34,12 @@ async function currentPattern() {
 
 async function sync() {
   const registered = await browser.scripting
-    .getRegisteredContentScripts({ ids: [SCRIPT_ID] })
+    .getRegisteredContentScripts({ ids: SCRIPT_IDS })
     .catch(() => []);
   if (registered.length > 0) {
-    await browser.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] });
+    await browser.scripting.unregisterContentScripts({
+      ids: registered.map((script) => script.id),
+    });
   }
 
   const pattern = await currentPattern();
@@ -52,6 +57,16 @@ async function sync() {
       runAt: "document_idle",
       // Re-registered on every startup instead, so a stale pattern from an old
       // session can never outlive the setting it came from.
+      persistAcrossSessions: false,
+    },
+    {
+      id: PAGE_SCRIPT_ID,
+      matches: [pattern],
+      js: ["src/page.js"],
+      // MAIN so it can replace the fetch Immich actually calls, and at
+      // document_start so the patch is in place before Immich asks for anything.
+      world: "MAIN",
+      runAt: "document_start",
       persistAcrossSessions: false,
     },
   ]);

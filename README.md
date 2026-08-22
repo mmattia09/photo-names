@@ -21,6 +21,10 @@ easy to spot. Typing that out by hand for every photo is what this replaces.
 
 - **One button, in the obvious place** — beside the description field in the
   asset viewer's info panel, in the same style as the panel around it.
+- **Quick add** — a toggle next to Immich's own tag buttons. With it on, two
+  clicks mark the opposite corners of a face and Immich's picker opens on that
+  box, so tagging a group photo is click, click, name — over and over, without
+  dragging a rectangle each time. Escape backs out.
 - **Names come from Immich itself** — the people already recognised (and named)
   on the open photo, in the order Immich returns them.
 - **Unnamed and hidden people are skipped** — a face Immich has not learnt a
@@ -120,6 +124,31 @@ The description is written into the textarea and an `input` event is dispatched,
 which is what Immich's Svelte binding listens for. Saving is left to Immich: it
 sends its own `PUT /api/assets/{id}` when the field loses focus.
 
+### Quick add
+
+Immich's tag dialog is the good part — it searches people and creates new ones —
+but the box it sends is the one dragged on its canvas, and that canvas is a
+Fabric.js surface sealed inside a Svelte component with no way in from outside.
+
+So the box is taken from the other end. Two clicks are read against the
+displayed image: `getBoundingClientRect()` already carries Immich's zoom and pan
+transform, so a click becomes a pixel of the image at any magnification without
+anyone parsing a matrix, and the image's own `naturalWidth`/`naturalHeight` is
+the coordinate space Immich reports as `imageWidth`/`imageHeight` — the two
+cannot drift apart. Immich swaps the `<img>` from `size=preview` to
+`size=fullsize` on zoom, so the source is matched by asset rather than by
+rendition.
+
+That box is handed to [`src/page.js`](src/page.js) on a dataset attribute.
+Immich's own tag button is then clicked for real, its default box hidden, and
+when a person is chosen the outgoing `POST /api/faces` has its `x`, `y`, `width`
+and `height` swapped for the drawn ones on the way out. Immich keeps its dialog
+and does its own saving; only the four numbers change.
+
+Opening the picker is Immich's own button, and Immich resets the zoom when it
+opens — the box is already captured by then, so nothing is lost, but the view
+does return to fit.
+
 Built against **Immich v3.1.0**.
 
 ## Development
@@ -132,9 +161,13 @@ npm run build   # package into web-ext-artifacts/
 npm run sign    # same, signed by Mozilla (unlisted); needs WEB_EXT_API_* set
 ```
 
-The whole extension is four small files under [`src/`](src): a background script
-that registers and unregisters the content script, the content script itself, and
-the options page.
+The extension is a handful of small files under [`src/`](src): a background
+script that registers and unregisters the content scripts, the content script
+itself, a page-world script holding the one `fetch` patch, and the options page.
+
+`src/page.js` is registered with `world: "MAIN"` — it has to be the page's own
+`fetch` that gets replaced, which an isolated content script cannot reach. That
+is also why the minimum is Firefox 128.
 
 ## License
 
