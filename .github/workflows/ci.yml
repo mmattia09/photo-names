@@ -23,3 +23,8 @@ jobs:
       # minimum version that Firefox does not accept only shows up at install.
       - name: Lint
         run: npx --yes web-ext@8 lint --source-dir=.
+
+      # The geometry and the key handling are the parts that go quietly wrong,
+      # and neither needs a browser to check.
+      - name: Test
+        run: npm test

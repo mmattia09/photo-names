@@ -21,10 +21,17 @@ easy to spot. Typing that out by hand for every photo is what this replaces.
 
 - **One button, in the obvious place** — beside the description field in the
   asset viewer's info panel, in the same style as the panel around it.
-- **Quick add** — a toggle next to Immich's own tag buttons. With it on, two
-  clicks mark the opposite corners of a face and Immich's picker opens on that
-  box, so tagging a group photo is click, click, name — over and over, without
-  dragging a rectangle each time. Escape backs out.
+- **Quick add** — a toggle next to Immich's own tag buttons, or the **A** key.
+  With it on, two clicks mark the opposite corners of a face and Immich's picker
+  opens on that box, so tagging a group photo is click, click, name — over and
+  over, without dragging a rectangle each time.
+- **Hold ⌥ to move the box** — when the size is right but it is sitting off the
+  face, Option turns the second click into a move: same dimensions, new place.
+  Let go and it resizes again.
+- **The whole tag runs on the keyboard** — Immich leaves the picker's focus in
+  the search box and its confirm dialog focused on the close button, so Enter
+  does nothing at either step. Here it picks the top match, then confirms:
+  draw, type, Enter, Enter.
 - **Names come from Immich itself** — the people already recognised (and named)
   on the open photo, in the order Immich returns them.
 - **Unnamed and hidden people are skipped** — a face Immich has not learnt a
@@ -39,6 +46,20 @@ easy to spot. Typing that out by hand for every photo is what this replaces.
   access to that one host. It ships with no permission to read any site.
 - **No account, no server, no telemetry** — the only network call it makes is a
   read of the open photo, to your own instance.
+
+## Keyboard
+
+| Key | |
+|---|---|
+| **A** | Turn quick add on or off (in the viewer, with the info panel open) |
+| **Enter** | In Immich's tag picker, take the top match; on its confirm dialog, confirm |
+| **⌥** *(held)* | While drawing, move the box instead of resizing it |
+| **Esc** | Drop the box being drawn, then leave quick add — and step out of the description field without closing the viewer |
+
+Enter is only claimed while Immich's tagging canvas is up, which it is for the
+whole flow, dialog included — so it is never taken from any other confirm in the
+app, least of all a delete. **A** is checked against Immich's own bindings: `f`
+and the rest still reach it, `a` was not bound.
 
 ## Installation
 
@@ -156,6 +177,7 @@ Built against **Immich v3.1.0**.
 ```bash
 npm install
 npm run lint    # web-ext lint
+npm test        # the geometry and the key handling, in node, no browser
 npm start       # a scratch Firefox profile with the extension loaded
 npm run build   # package into web-ext-artifacts/
 npm run sign    # same, signed by Mozilla (unlisted); needs WEB_EXT_API_* set
@@ -164,6 +186,11 @@ npm run sign    # same, signed by Mozilla (unlisted); needs WEB_EXT_API_* set
 The extension is a handful of small files under [`src/`](src): a background
 script that registers and unregisters the content scripts, the content script
 itself, a page-world script holding the one `fetch` patch, and the options page.
+
+[`test/`](test) runs the two scripts the way the page does — the real files in a
+`vm` with just enough DOM stubbed to drive their own listeners — and asserts on
+the box they would send and the buttons they would press. No browser, no
+dependencies.
 
 `src/page.js` is registered with `world: "MAIN"` — it has to be the page's own
 `fetch` that gets replaced, which an isolated content script cannot reach. That

@@ -1,14 +1,15 @@
 {
   "name": "photo-names",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Firefox extension that fills an Immich photo description with the names of the people recognised in it",
   "private": true,
   "license": "MIT",
   "scripts": {
     "start": "web-ext run --source-dir=.",
     "lint": "web-ext lint --source-dir=.",
-    "build": "web-ext build --source-dir=. --overwrite-dest --ignore-files package.json package-lock.json",
-    "sign": "web-ext sign --channel=unlisted --source-dir=. --ignore-files package.json package-lock.json"
+    "test": "node test/page.test.mjs && node test/content.test.mjs",
+    "build": "web-ext build --source-dir=. --overwrite-dest --ignore-files package.json package-lock.json test test/**",
+    "sign": "web-ext sign --channel=unlisted --source-dir=. --ignore-files package.json package-lock.json test test/**"
   },
   "devDependencies": {
     "web-ext": "^8.5.0"

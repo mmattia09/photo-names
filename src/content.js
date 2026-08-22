@@ -260,6 +260,9 @@ function ensureFillButton() {
 const quick = {
   on: false,
   first: null,
+  cursor: null,
+  /** Set while Option is down: the size to keep and where the pointer grabbed it. */
+  drag: null,
   band: null,
   hint: null,
   pending: null,
@@ -267,10 +270,29 @@ const quick = {
   frame: 0,
 };
 
+const DRAW_HINT = "Click two opposite corners of a face · Enter names · A or Esc to leave";
+const SIZING_HINT = "Now the opposite corner · hold ⌥ to move the box · Esc to cancel";
+
+/** Single-letter shortcuts have no business firing into a field. */
+function isTyping(node) {
+  return !!(
+    node &&
+    typeof node.closest === "function" &&
+    node.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
+  );
+}
+
+function focusedDescription() {
+  const active = document.activeElement;
+  return active && typeof active.matches === "function" && active.matches(DESCRIPTION_SELECTOR)
+    ? active
+    : null;
+}
+
 function toggleTip() {
   return quick.on
-    ? "Quick add is on — Esc to leave"
-    : "Quick add: click two corners to tag a face";
+    ? "Quick add is on — A or Esc to leave"
+    : "Quick add (A): click two corners to tag a face";
 }
 
 function tagButton() {
@@ -327,16 +349,49 @@ function overlay(className) {
   return element;
 }
 
-function placeBand(fromEvent) {
-  if (!quick.first || !quick.band) return;
-  const start = toScreenBox({ ...quick.first, width: 0, height: 0 });
-  if (!start) return;
-  const left = Math.min(start.left, fromEvent.clientX);
-  const top = Math.min(start.top, fromEvent.clientY);
-  quick.band.style.left = `${left}px`;
-  quick.band.style.top = `${top}px`;
-  quick.band.style.width = `${Math.abs(fromEvent.clientX - start.left)}px`;
-  quick.band.style.height = `${Math.abs(fromEvent.clientY - start.top)}px`;
+/**
+ * The box as it stands. Normally one corner is pinned where you first clicked
+ * and the other follows the pointer; with Option held the whole rectangle
+ * travels instead, at the size it already had — for when the size is right but
+ * it is sitting slightly off the face.
+ */
+function liveBox(point) {
+  if (quick.drag) {
+    return {
+      x: point.x - quick.drag.dx,
+      y: point.y - quick.drag.dy,
+      width: quick.drag.width,
+      height: quick.drag.height,
+    };
+  }
+  return {
+    x: Math.min(quick.first.x, point.x),
+    y: Math.min(quick.first.y, point.y),
+    width: Math.abs(point.x - quick.first.x),
+    height: Math.abs(point.y - quick.first.y),
+  };
+}
+
+/** Option-dragging can carry the box off the edge; the API wants it on the photo. */
+function clampBox(box, imageWidth, imageHeight) {
+  const x = clamp(box.x, 0, Math.max(0, imageWidth - box.width));
+  const y = clamp(box.y, 0, Math.max(0, imageHeight - box.height));
+  return {
+    x,
+    y,
+    width: clamp(box.width, 0, imageWidth - x),
+    height: clamp(box.height, 0, imageHeight - y),
+  };
+}
+
+function drawBand(box) {
+  if (!quick.band) return;
+  const screen = toScreenBox(box);
+  if (!screen) return;
+  quick.band.style.left = `${screen.left}px`;
+  quick.band.style.top = `${screen.top}px`;
+  quick.band.style.width = `${screen.width}px`;
+  quick.band.style.height = `${screen.height}px`;
 }
 
 /** The confirmed box is redrawn every frame, because opening Immich's picker
@@ -344,13 +399,7 @@ function placeBand(fromEvent) {
 function trackPending() {
   cancelAnimationFrame(quick.frame);
   if (!quick.pending || !quick.band) return;
-  const screen = toScreenBox(quick.pending);
-  if (screen) {
-    quick.band.style.left = `${screen.left}px`;
-    quick.band.style.top = `${screen.top}px`;
-    quick.band.style.width = `${screen.width}px`;
-    quick.band.style.height = `${screen.height}px`;
-  }
+  drawBand(quick.pending);
   quick.frame = requestAnimationFrame(trackPending);
 }
 
@@ -370,6 +419,8 @@ function clearDrawing() {
   quick.band?.remove();
   quick.band = null;
   quick.first = null;
+  quick.cursor = null;
+  quick.drag = null;
   quick.pending = null;
   quick.pickerSeen = false;
   delete document.documentElement.dataset.photoNamesRect;
@@ -380,7 +431,7 @@ function setQuick(on) {
   quick.on = on;
   clearDrawing();
   document.documentElement.classList.toggle("photo-names-quick", on);
-  setHint(on ? "Click two opposite corners of a face · Esc to cancel" : null);
+  setHint(on ? DRAW_HINT : null);
   for (const button of document.querySelectorAll(`.${TOGGLE_CLASS}`)) {
     button.dataset.active = String(on);
     button.dataset.tip = toggleTip();
@@ -388,35 +439,36 @@ function setQuick(on) {
   }
 }
 
-function beginBox(event) {
-  quick.first = toImagePoint(event);
-  if (!quick.first) return;
+function beginBox(point) {
+  quick.first = point;
+  quick.cursor = point;
+  quick.drag = null;
   quick.band = overlay("photo-names-band");
-  placeBand(event);
-  setHint("Now click the opposite corner · Esc to cancel");
+  drawBand(liveBox(point));
+  setHint(SIZING_HINT);
 }
 
 /**
  * Hands the box to the page script and lets Immich take over: its picker is
  * opened for real, so searching and creating people stay Immich's job.
  */
-function finishBox(event) {
-  const second = toImagePoint(event);
+function finishBox(point) {
   const first = quick.first;
-  if (!first || !second) return clearDrawing();
+  if (!first) return clearDrawing();
 
+  const drawn = clampBox(liveBox(point), first.imageWidth, first.imageHeight);
   const box = {
-    x: Math.round(Math.min(first.x, second.x)),
-    y: Math.round(Math.min(first.y, second.y)),
-    width: Math.round(Math.abs(second.x - first.x)),
-    height: Math.round(Math.abs(second.y - first.y)),
+    x: Math.round(drawn.x),
+    y: Math.round(drawn.y),
+    width: Math.round(drawn.width),
+    height: Math.round(drawn.height),
     imageWidth: first.imageWidth,
     imageHeight: first.imageHeight,
   };
 
   if (box.width < MIN_BOX || box.height < MIN_BOX) {
     clearDrawing();
-    setHint("Too small — click two opposite corners of a face · Esc to cancel");
+    setHint(`Too small — ${DRAW_HINT}`);
     return;
   }
 
@@ -428,6 +480,7 @@ function finishBox(event) {
   }
 
   quick.first = null;
+  quick.drag = null;
   quick.pending = box;
   document.documentElement.dataset.photoNamesRect = JSON.stringify(box);
   // Immich would otherwise draw its own default box over the photo.
@@ -443,38 +496,144 @@ function onQuickClick(event) {
   if (event.target.closest("#detail-panel, button, a, input, textarea, [role='button']")) return;
   if (!previewImage()) return;
 
+  const point = toImagePoint(event);
+  if (!point) return;
+
   event.preventDefault();
   event.stopPropagation();
 
-  if (quick.first) finishBox(event);
-  else beginBox(event);
+  if (quick.first) finishBox(point);
+  else beginBox(point);
 }
 
 function onQuickMove(event) {
-  if (quick.on && quick.first) placeBand(event);
+  if (!quick.on || !quick.first) return;
+  const point = toImagePoint(event);
+  if (!point) return;
+
+  if (event.altKey && !quick.drag) {
+    const box = liveBox(point);
+    quick.drag = {
+      dx: point.x - box.x,
+      dy: point.y - box.y,
+      width: box.width,
+      height: box.height,
+    };
+  } else if (!event.altKey && quick.drag) {
+    // Where the box was left, which is the last point seen while it was being
+    // carried — reading the new one would translate it once more on the way out.
+    const box = liveBox(quick.cursor || point);
+    quick.drag = null;
+    // Back to resizing under the same rule as the first drag: the corner the
+    // pointer is furthest from stays put, and the pointer takes the other one.
+    quick.first = {
+      ...quick.first,
+      x: point.x < box.x + box.width / 2 ? box.x + box.width : box.x,
+      y: point.y < box.y + box.height / 2 ? box.y + box.height : box.y,
+    };
+  }
+
+  quick.cursor = point;
+  drawBand(liveBox(point));
 }
 
 function onQuickKey(event) {
-  if (event.key !== "Escape" || !quick.on) return;
+  if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+
+  if (event.key === "a" || event.key === "A") {
+    if (isTyping(event.target)) return;
+    // Only where the mode can do anything: the viewer with its info panel open,
+    // which is also where the toggle it mirrors lives. Immich binds no "a" of
+    // its own, so nothing is being taken away.
+    if (!tagButton()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setQuick(!quick.on);
+    return;
+  }
+
+  if (event.key !== "Escape") return;
+
+  // Escape in the description would close the whole viewer; stepping out of the
+  // field is the more useful reading while the caret is sitting in it.
+  const description = focusedDescription();
+  if (description) {
+    event.preventDefault();
+    event.stopPropagation();
+    description.blur();
+    return;
+  }
+
+  if (!quick.on) return;
 
   if (quick.pending) {
     // Let Immich see it too, so its picker closes with our box.
     clearDrawing();
-    setHint("Click two opposite corners of a face · Esc to cancel");
-    return;
-  }
-
-  if (quick.first) {
-    event.preventDefault();
-    event.stopPropagation();
-    clearDrawing();
-    setHint("Click two opposite corners of a face · Esc to cancel");
+    setHint(DRAW_HINT);
     return;
   }
 
   event.preventDefault();
   event.stopPropagation();
+
+  if (quick.first) {
+    clearDrawing();
+    setHint(DRAW_HINT);
+    return;
+  }
+
   setQuick(false);
+}
+
+/* ------------------------------------------------------------- tag keys -- */
+
+/**
+ * Immich leaves the picker's focus in the search box and its confirm dialog
+ * focused on the close button, so Enter does nothing at either step. These two
+ * shortcuts finish the job the keyboard already started.
+ *
+ * Everything here is gated on Immich's tagging canvas being mounted — it stays
+ * up for the whole flow, dialog included — so Enter is never taken from any
+ * other confirm in the app, least of all a delete.
+ */
+function taggingOpen() {
+  return !!document.querySelector(".canvas-container");
+}
+
+/** bg-danger marks the button that goes through with it; bg-dark cancels. */
+function confirmButton() {
+  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+  if (!dialog) return null;
+  return (
+    [...dialog.querySelectorAll("button")].find(
+      (button) => /bg-danger/.test(button.className) && button.textContent.trim(),
+    ) || null
+  );
+}
+
+/** The topmost row of the picker — the one the search has filtered to. */
+function firstPerson() {
+  for (const button of document.querySelectorAll("button")) {
+    if (button.closest("#detail-panel")) continue;
+    if (!button.offsetParent) continue;
+    if (button.querySelector('img[src*="/api/people/"]')) return button;
+  }
+  return null;
+}
+
+function onTagKey(event) {
+  if (event.key !== "Enter") return;
+  if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.isComposing) return;
+  if (!taggingOpen()) return;
+
+  // The dialog comes second in the flow, so it gets first refusal on the key.
+  const target = confirmButton() || firstPerson();
+  if (!target) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  target.click();
 }
 
 /** Immich's tagging canvas going away means the picker closed, either way. */
@@ -485,7 +644,7 @@ function watchPicker() {
     quick.pickerSeen = true;
   } else if (quick.pickerSeen) {
     clearDrawing();
-    setHint("Click two opposite corners of a face · Esc to cancel");
+    setHint(DRAW_HINT);
   }
 }
 
@@ -549,6 +708,7 @@ window.addEventListener("resize", hideTip);
 document.addEventListener("click", onQuickClick, true);
 document.addEventListener("mousemove", onQuickMove, true);
 document.addEventListener("keydown", onQuickKey, true);
+document.addEventListener("keydown", onTagKey, true);
 
 new MutationObserver(schedule).observe(document.documentElement, {
   childList: true,
