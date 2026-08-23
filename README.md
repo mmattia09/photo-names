@@ -191,6 +191,58 @@ does return to fit.
 
 Built against **Immich v3.1.0**.
 
+## Changelog
+
+Versions are tagged, and each tag carries a built `.xpi` on its
+[release](https://github.com/mmattia09/photo-names/releases).
+
+### 1.3.1
+
+The changelog itself. No code changed.
+
+### 1.3.0
+
+- **X** turns quick add on and off, replacing **A**. `a` is Immich's own *next
+  photo*: the check that had cleared it only watched for non-GET requests, and
+  stepping between photos is a client-side route change that makes none. Every
+  key is now checked against the address bar as well as the network.
+- **C** puts the caret in the description, **V** fills the names in first, **R**
+  dismisses Immich's notifications.
+- **Backspace** asks before trashing. Immich's own Delete trashes on the spot and
+  this version has no preference to add a confirmation, so the question is a
+  dialog built from Immich's utility classes; Enter presses Immich's trash button,
+  leaving the trashing, the step to the next photo and the notification to Immich.
+- The two key handlers became one, so precedence is written down rather than
+  implied: our dialog, then the tag flow, then Escape, then the letters.
+
+### 1.2.0
+
+- **Enter** runs the tag flow — top match, then confirm — where Immich left it
+  doing nothing at either step. Claimed only while Immich's tagging canvas is
+  mounted, so no other confirm in the app loses the key.
+- Holding **⌥** while drawing moves the box at its current size instead of
+  resizing it.
+- [`test/`](test) arrives: both scripts run in a `vm` with enough DOM stubbed to
+  drive their own listeners. CI runs it.
+
+### 1.1.0
+
+- **Quick add**: two clicks mark the corners of a face and Immich's picker opens
+  on that box. The box is carried to `src/page.js` and swapped into the outgoing
+  `POST /api/faces`, because Immich's own box lives on a Fabric.js canvas sealed
+  inside a Svelte component.
+- Fixed the media lookup for the zoomed rendition — Immich swaps the `<img>` from
+  `size=preview` to `size=fullsize` on zoom, which the old selector missed.
+- Both buttons carry Immich's own tooltip instead of a native `title`.
+
+Built but never tagged; 1.2.0 is the first release that includes it.
+
+### 1.0.0
+
+The description button: fills the field with the people on the photo as
+`mario-rossi+anna-verdi_`, leaves the caret at the end, and lets Immich do the
+saving.
+
 ## Development
 
 ```bash
