@@ -9,6 +9,7 @@ import vm from "node:vm";
 
 const frames = [];
 const clicked = [];
+const blurred = [];
 
 function el(props = {}) {
   const node = {
@@ -17,7 +18,8 @@ function el(props = {}) {
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     setAttribute() {}, getAttribute: () => null,
     addEventListener(type, fn) { (this._on[type] ||= []).push(fn); },
-    remove() {}, appendChild() {}, insertBefore() {},
+    remove() {}, appendChild() {}, insertBefore() {}, append() {},
+    focus() {}, blur() { blurred.push(props.name || "?"); }, setSelectionRange() {},
     querySelector: () => null, querySelectorAll: () => [], closest: () => null,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }),
     click() { clicked.push(props.name || "?"); },
@@ -40,7 +42,14 @@ const plusButton = el({
 });
 plusButton.parentElement = el({ querySelector: () => null, insertBefore: (n) => { toggleButton = n; } });
 
-const state = { canvas: false, confirmBtn: null, personBtn: null };
+const trashBtn = el({ name: "trash", querySelector: (s) => (s === "svg path" ? el({ getAttribute: (a) => (a === "d" ? "M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19M8,9H16V19H8V9M15.5,4L14.5,3H9.5L8.5,4H5V6H19V4H15.5Z" : null) }) : null) });
+let descriptionFocused = false;
+const descriptionField = el({ name: "description", value: "abc", focus: () => { descriptionFocused = true; } });
+const fillBtn = el({ name: "fill" });
+const toastClose = el({ name: "toast-close" });
+const toastCard = el({ querySelector: () => toastClose });
+const toastStack = el({ children: [toastCard] });
+const state = { canvas: false, confirmBtn: null, personBtn: null, description: true, toasts: true };
 const documentElement = { dataset: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false } };
 const docOn = {};
 
@@ -48,10 +57,16 @@ const document = {
   documentElement, body: { appendChild() {}, dataset: {} }, activeElement: null,
   addEventListener: (t, fn) => { (docOn[t] ||= []).push(fn); },
   removeEventListener() {}, createElement: () => el(),
-  getElementById: (id) => (id === "immich-asset-viewer" ? el({ querySelector: () => null }) : null),
+  getElementById: (id) =>
+    id === "immich-asset-viewer"
+      ? el({ querySelector: () => null, querySelectorAll: () => [trashBtn] })
+      : null,
   querySelector: (sel) => {
     if (sel.includes("canvas-container")) return state.canvas ? el() : null;
     if (sel.includes('role="dialog"')) return state.confirmBtn ? el({ querySelectorAll: () => [state.confirmBtn] }) : null;
+    if (sel.includes("autogrow-textarea")) return state.description ? descriptionField : null;
+    if (sel.includes("photo-names-button")) return fillBtn;
+    if (sel.includes("z-60")) return state.toasts ? toastStack : null;
     return null;
   },
   querySelectorAll: (sel) => {
@@ -159,36 +174,83 @@ fire("keydown", kb("Enter", { metaKey: true }));
 check(clicked.length === 0, "Cmd+Enter is left alone", clicked);
 
 
-console.log("\n6. the A shortcut");
+console.log("\n6. the X shortcut");
 reset();
 state.canvas = false; state.confirmBtn = null; state.personBtn = null;
 const isOn = () => toggleButton.dataset.active === "true";
-while (isOn()) fire("keydown", kb("a", { target: { closest: () => null } }));
+while (isOn()) fire("keydown", kb("x", { target: { closest: () => null } }));
 check(!isOn(), "starts off for this check", toggleButton.dataset.active);
-fire("keydown", kb("a", { target: { closest: () => null } }));
-check(isOn(), "A turns it on", toggleButton.dataset.active);
-fire("keydown", kb("a", { target: { closest: () => null } }));
-check(!isOn(), "A turns it off again", toggleButton.dataset.active);
+fire("keydown", kb("x", { target: { closest: () => null } }));
+check(isOn(), "X turns it on", toggleButton.dataset.active);
+fire("keydown", kb("x", { target: { closest: () => null } }));
+check(!isOn(), "X turns it off again", toggleButton.dataset.active);
 
-fire("keydown", kb("a", { target: { closest: () => ({ tagName: "INPUT" }) } }));
-check(!isOn(), "typing an a in a field does not toggle", toggleButton.dataset.active);
+fire("keydown", kb("x", { target: { closest: () => ({ tagName: "INPUT" }) } }));
+check(!isOn(), "typing an x in a field does not toggle", toggleButton.dataset.active);
 
-fire("keydown", kb("a", { metaKey: true, target: { closest: () => null } }));
-check(!isOn(), "Cmd+A is left alone", toggleButton.dataset.active);
+fire("keydown", kb("x", { metaKey: true, target: { closest: () => null } }));
+check(!isOn(), "Cmd+X is left alone", toggleButton.dataset.active);
 
+// A is Immich's own "next photo" and must stay Immich's.
 fire("keydown", kb("a", { target: { closest: () => null } }));
+check(!isOn(), "A is left to Immich", toggleButton.dataset.active);
+
+fire("keydown", kb("x", { target: { closest: () => null } }));
 check(isOn(), "on again", toggleButton.dataset.active);
 fire("keydown", kb("Escape", { target: { closest: () => null } }));
 check(!isOn(), "Escape still leaves the mode", toggleButton.dataset.active);
 
 console.log("\n7. Escape steps out of the description");
-let blurred = false;
-document.activeElement = el({ matches: (sel) => sel.includes("autogrow-textarea"), blur: () => { blurred = true; } });
+let descriptionBlurred = false;
+document.activeElement = el({ matches: (sel) => sel.includes("autogrow-textarea"), blur: () => { descriptionBlurred = true; } });
 let stopped = false;
 fire("keydown", { key: "Escape", target: { closest: () => null }, preventDefault() {}, stopPropagation() { stopped = true; } });
-check(blurred, "the field is blurred", blurred);
+check(descriptionBlurred, "the field is blurred", descriptionBlurred);
 check(stopped, "and Immich never sees the key, so the viewer stays open", stopped);
 document.activeElement = null;
+
+
+console.log("\n8. C, V and R");
+reset();
+state.canvas = false; state.confirmBtn = null;
+const noField = { target: { closest: () => null } };
+
+descriptionFocused = false;
+fire("keydown", kb("c", noField));
+check(descriptionFocused, "C puts the caret in the description", descriptionFocused);
+
+fire("keydown", kb("v", noField));
+check(clicked.includes("fill"), "V runs the same fill the button does", clicked);
+
+reset();
+fire("keydown", kb("r", noField));
+check(clicked.includes("toast-close"), "R closes the notification", clicked);
+
+reset();
+descriptionFocused = false;
+fire("keydown", kb("c", { target: { closest: () => ({ tagName: "TEXTAREA" }) } }));
+fire("keydown", kb("v", { target: { closest: () => ({ tagName: "TEXTAREA" }) } }));
+fire("keydown", kb("r", { target: { closest: () => ({ tagName: "TEXTAREA" }) } }));
+check(clicked.length === 0 && !descriptionFocused, "none of them fire while typing", { clicked, descriptionFocused });
+
+console.log("\n9. Backspace asks first");
+reset();
+fire("keydown", kb("Backspace", noField));
+check(!clicked.includes("trash"), "Backspace alone deletes nothing", clicked);
+
+fire("keydown", kb("Enter", noField));
+check(clicked.includes("trash"), "Enter on the dialog goes through to Immich's own delete", clicked);
+
+reset();
+fire("keydown", kb("Backspace", noField));
+fire("keydown", kb("Escape", noField));
+fire("keydown", kb("Enter", noField));
+check(!clicked.includes("trash"), "Escape drops it, and Enter afterwards does nothing", clicked);
+
+reset();
+fire("keydown", kb("Backspace", { target: { closest: () => ({ tagName: "TEXTAREA" }) } }));
+fire("keydown", kb("Enter", { target: { closest: () => null } }));
+check(!clicked.includes("trash"), "Backspace while typing never opens it", clicked);
 
 console.log(ok ? "\nALL PASS" : "\nFAILURES");
 process.exit(ok ? 0 : 1);

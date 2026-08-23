@@ -21,7 +21,7 @@ easy to spot. Typing that out by hand for every photo is what this replaces.
 
 - **One button, in the obvious place** — beside the description field in the
   asset viewer's info panel, in the same style as the panel around it.
-- **Quick add** — a toggle next to Immich's own tag buttons, or the **A** key.
+- **Quick add** — a toggle next to Immich's own tag buttons, or the **X** key.
   With it on, two clicks mark the opposite corners of a face and Immich's picker
   opens on that box, so tagging a group photo is click, click, name — over and
   over, without dragging a rectangle each time.
@@ -51,15 +51,29 @@ easy to spot. Typing that out by hand for every photo is what this replaces.
 
 | Key | |
 |---|---|
-| **A** | Turn quick add on or off (in the viewer, with the info panel open) |
-| **Enter** | In Immich's tag picker, take the top match; on its confirm dialog, confirm |
+| **X** | Turn quick add on or off |
+| **C** | Put the caret in the description |
+| **V** | Fill in the names, then put the caret at the end of them |
+| **R** | Dismiss Immich's notifications |
+| **Enter** | In Immich's tag picker, take the top match; on a confirm dialog, confirm |
+| **Backspace** | Ask before moving the photo to the trash — **Enter** goes through with it |
 | **⌥** *(held)* | While drawing, move the box instead of resizing it |
-| **Esc** | Drop the box being drawn, then leave quick add — and step out of the description field without closing the viewer |
+| **Esc** | Drop the box being drawn, then leave quick add — close the delete question — and step out of the description field without closing the viewer |
 
-Enter is only claimed while Immich's tagging canvas is up, which it is for the
-whole flow, dialog included — so it is never taken from any other confirm in the
-app, least of all a delete. **A** is checked against Immich's own bindings: `f`
-and the rest still reach it, `a` was not bound.
+Single letters only fire in the viewer, and never while the caret is in a field.
+Every one was checked against Immich's own bindings first: `a` is Immich's *next
+photo* and is left alone, while `x`, `c`, `v` and `r` reach nothing of Immich's.
+
+Enter is claimed in exactly two places: the tag flow, gated on Immich's tagging
+canvas being mounted — it stays up for the whole flow, dialog included — and the
+delete question this extension puts up itself. It is never taken from any other
+confirm in the app.
+
+**Backspace** exists because Immich's own **Delete** trashes the photo on the
+spot, with nothing to confirm and this version offering no setting to change
+that. Backspace asks first, in a dialog built from Immich's own classes, and on
+Enter hands the job to Immich's own trash button — so the trashing, the move to
+the next photo and the notification are all still Immich's.
 
 ## Installation
 
@@ -165,6 +179,11 @@ Immich's own tag button is then clicked for real, its default box hidden, and
 when a person is chosen the outgoing `POST /api/faces` has its `x`, `y`, `width`
 and `height` swapped for the drawn ones on the way out. Immich keeps its dialog
 and does its own saving; only the four numbers change.
+
+Immich's Delete has no confirmation and no preference to add one, so the
+Backspace question is a dialog of this extension's own, assembled from Immich's
+utility classes — the same card, borders and buttons — and it only ever calls
+Immich's trash button. The extension never issues a delete itself.
 
 Opening the picker is Immich's own button, and Immich resets the zoom when it
 opens — the box is already captured by then, so nothing is lost, but the view

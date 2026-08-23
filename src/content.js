@@ -32,6 +32,13 @@ const PLUS_PATH = "M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z";
 /** Below this, in preview pixels, a box is a stray click rather than a face. */
 const MIN_BOX = 12;
 
+/** Immich's delete button, matched by its icon so the locale cannot matter. */
+const TRASH_PATH =
+  "M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19M8,9H16V19H8V9M15.5,4L14.5,3H9.5L8.5,4H5V6H19V4H15.5Z";
+
+/** Where Immich stacks its notifications. */
+const TOAST_STACK = "div.fixed.z-60.top-16";
+
 /**
  * Immich's own tooltip classes and timing, so the hint over these buttons is the
  * one the rest of the toolbar shows. bits-ui drives the real ones from Svelte
@@ -270,7 +277,7 @@ const quick = {
   frame: 0,
 };
 
-const DRAW_HINT = "Click two opposite corners of a face · Enter names · A or Esc to leave";
+const DRAW_HINT = "Click two opposite corners of a face · Enter names · X or Esc to leave";
 const SIZING_HINT = "Now the opposite corner · hold ⌥ to move the box · Esc to cancel";
 
 /** Single-letter shortcuts have no business firing into a field. */
@@ -291,8 +298,8 @@ function focusedDescription() {
 
 function toggleTip() {
   return quick.on
-    ? "Quick add is on — A or Esc to leave"
-    : "Quick add (A): click two corners to tag a face";
+    ? "Quick add is on — X or Esc to leave"
+    : "Quick add (X): click two corners to tag a face";
 }
 
 function tagButton() {
@@ -537,52 +544,123 @@ function onQuickMove(event) {
   drawBand(liveBox(point));
 }
 
-function onQuickKey(event) {
-  if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+/* ------------------------------------------------------- Immich's dialog -- */
 
-  if (event.key === "a" || event.key === "A") {
-    if (isTyping(event.target)) return;
-    // Only where the mode can do anything: the viewer with its info panel open,
-    // which is also where the toggle it mirrors lives. Immich binds no "a" of
-    // its own, so nothing is being taken away.
-    if (!tagButton()) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setQuick(!quick.on);
-    return;
-  }
+/**
+ * Immich's confirm dialog rebuilt from its own utility classes. It has to be
+ * rebuilt rather than borrowed: Immich shows no confirmation for a delete at
+ * all — the Delete key trashes the photo on the spot — so there is no dialog of
+ * its own to reuse here.
+ */
+const DIALOG = {
+  backdrop: "z-40 fixed start-0 top-0 flex h-dvh max-h-dvh w-screen bg-black/30 dark:bg-black/70",
+  frame: "z-50 fixed inset-0 m-auto flex max-h-dvh grow sm:p-4 sm:h-min md:max-w-md",
+  column: "flex w-full grow flex-col justify-center",
+  card: "w-full overflow-hidden bg-light dark:bg-subtle border-subtle shadow-primary/20 flex rounded-none border shadow-sm sm:rounded-2xl dark:border-white/10 h-full sm:h-min md:max-w-md",
+  inner: "flex w-full grow flex-col",
+  header: "flex flex-col p-4 border-b border-gray-200 px-5 py-3 dark:border-white/10",
+  headerRow: "flex items-center justify-between gap-2",
+  title: "tracking-tight md:text-xl text-dark/90 grow text-lg font-semibold",
+  body: "immich-scrollbar h-full w-full overflow-auto p-4 grow px-5",
+  footer: "flex items-center p-4 border-t border-gray-200 dark:border-white/10",
+  footerRow: "flex flex-row items-center w-full gap-2",
+  close:
+    "flex items-center justify-center gap-1 font-medium outline-offset-2 transition-colors focus-visible:outline-2 cursor-pointer rounded-full text-base h-10 w-10 outline-dark text-dark not-disabled:hover:bg-dark/10 -me-2",
+  button:
+    "flex items-center justify-center gap-1 font-medium outline-offset-2 transition-colors focus-visible:outline-2 cursor-pointer rounded-full w-full px-5 py-2 text-base",
+  cancel: "outline-dark bg-dark text-light not-disabled:hover:bg-dark/80",
+  danger: "outline-danger bg-danger text-light not-disabled:hover:bg-danger/80",
+};
 
-  if (event.key !== "Escape") return;
+const CONFIRM_CLASS = "photo-names-confirm";
+const confirmDialog = { root: null, run: null };
 
-  // Escape in the description would close the whole viewer; stepping out of the
-  // field is the more useful reading while the caret is sitting in it.
-  const description = focusedDescription();
-  if (description) {
-    event.preventDefault();
-    event.stopPropagation();
-    description.blur();
-    return;
-  }
+function closeConfirm() {
+  confirmDialog.root?.remove();
+  confirmDialog.root = null;
+  confirmDialog.run = null;
+}
 
-  if (!quick.on) return;
+function openConfirm({ title, message, confirmLabel, cancelLabel, onConfirm }) {
+  closeConfirm();
 
-  if (quick.pending) {
-    // Let Immich see it too, so its picker closes with our box.
-    clearDrawing();
-    setHint(DRAW_HINT);
-    return;
-  }
+  const root = document.createElement("div");
+  root.className = CONFIRM_CLASS;
 
-  event.preventDefault();
-  event.stopPropagation();
+  const backdrop = document.createElement("div");
+  backdrop.className = DIALOG.backdrop;
+  backdrop.addEventListener("click", closeConfirm);
 
-  if (quick.first) {
-    clearDrawing();
-    setHint(DRAW_HINT);
-    return;
-  }
+  const frame = document.createElement("div");
+  frame.className = DIALOG.frame;
+  frame.setAttribute("role", "dialog");
+  frame.setAttribute("aria-modal", "true");
 
-  setQuick(false);
+  const heading = document.createElement("p");
+  heading.className = DIALOG.title;
+  heading.textContent = title;
+
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = DIALOG.close;
+  close.setAttribute("aria-label", cancelLabel);
+  close.innerHTML =
+    '<svg width="60%" height="60%" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg>';
+  close.addEventListener("click", closeConfirm);
+
+  const header = document.createElement("div");
+  header.className = DIALOG.header;
+  const headerRow = document.createElement("div");
+  headerRow.className = DIALOG.headerRow;
+  headerRow.append(heading, close);
+  header.appendChild(headerRow);
+
+  const body = document.createElement("div");
+  body.className = DIALOG.body;
+  const paragraph = document.createElement("p");
+  paragraph.textContent = message;
+  body.appendChild(paragraph);
+
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = `${DIALOG.button} ${DIALOG.cancel}`;
+  cancel.textContent = cancelLabel;
+  cancel.addEventListener("click", closeConfirm);
+
+  const confirm = document.createElement("button");
+  confirm.type = "button";
+  confirm.className = `${DIALOG.button} ${DIALOG.danger}`;
+  confirm.textContent = confirmLabel;
+  confirm.addEventListener("click", () => {
+    const run = confirmDialog.run;
+    closeConfirm();
+    run?.();
+  });
+
+  const footerRow = document.createElement("div");
+  footerRow.className = DIALOG.footerRow;
+  footerRow.append(cancel, confirm);
+  const footer = document.createElement("div");
+  footer.className = DIALOG.footer;
+  footer.appendChild(footerRow);
+
+  const inner = document.createElement("div");
+  inner.className = DIALOG.inner;
+  inner.append(header, body, footer);
+  const card = document.createElement("div");
+  card.className = DIALOG.card;
+  card.appendChild(inner);
+  const column = document.createElement("div");
+  column.className = DIALOG.column;
+  column.appendChild(card);
+  frame.appendChild(column);
+
+  root.append(backdrop, frame);
+  document.body.appendChild(root);
+
+  confirmDialog.root = root;
+  confirmDialog.run = onConfirm;
+  confirm.focus();
 }
 
 /* ------------------------------------------------------------- tag keys -- */
@@ -594,15 +672,15 @@ function onQuickKey(event) {
  *
  * Everything here is gated on Immich's tagging canvas being mounted — it stays
  * up for the whole flow, dialog included — so Enter is never taken from any
- * other confirm in the app, least of all a delete.
+ * other confirm in the app.
  */
 function taggingOpen() {
   return !!document.querySelector(".canvas-container");
 }
 
 /** bg-danger marks the button that goes through with it; bg-dark cancels. */
-function confirmButton() {
-  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+function tagConfirmButton() {
+  const dialog = document.querySelector(`[role="dialog"][aria-modal="true"]:not(.${CONFIRM_CLASS} *)`);
   if (!dialog) return null;
   return (
     [...dialog.querySelectorAll("button")].find(
@@ -621,19 +699,155 @@ function firstPerson() {
   return null;
 }
 
-function onTagKey(event) {
-  if (event.key !== "Enter") return;
-  if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.isComposing) return;
-  if (!taggingOpen()) return;
+/* -------------------------------------------------------------- the keys -- */
 
-  // The dialog comes second in the flow, so it gets first refusal on the key.
-  const target = confirmButton() || firstPerson();
-  if (!target) return;
+/** Immich's own trash button, so deleting stays Immich's: it trashes, moves to
+    the next photo and reports, all the things reimplementing it would lose. */
+function trashButton() {
+  const viewer = document.getElementById("immich-asset-viewer");
+  if (!viewer) return null;
+  for (const button of viewer.querySelectorAll("button")) {
+    if (button.closest("#detail-panel")) continue;
+    const path = button.querySelector("svg path");
+    if (path && path.getAttribute("d") === TRASH_PATH) return button;
+  }
+  return null;
+}
 
+function focusDescription() {
+  const textarea = document.querySelector(DESCRIPTION_SELECTOR);
+  if (!textarea) return;
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  textarea.scrollTop = textarea.scrollHeight;
+}
+
+/** Immich stacks its notifications here; the one button on a card closes it. */
+function dismissNotifications() {
+  const stack = document.querySelector(TOAST_STACK);
+  if (!stack) return;
+  for (const card of [...stack.children]) card.querySelector("button")?.click();
+}
+
+function stop(event) {
   event.preventDefault();
   event.stopPropagation();
-  target.click();
+}
+
+/**
+ * One handler so the order is the order: our own dialog first, then Immich's
+ * tagging flow, then Escape, and only then the single letters — which never
+ * fire into a field.
+ */
+function onKey(event) {
+  if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+
+  if (confirmDialog.root) {
+    if (event.key === "Enter") {
+      stop(event);
+      const run = confirmDialog.run;
+      closeConfirm();
+      run?.();
+    } else if (event.key === "Escape") {
+      stop(event);
+      closeConfirm();
+    }
+    return;
+  }
+
+  if (event.key === "Enter" && !event.shiftKey && taggingOpen()) {
+    // The dialog comes second in the flow, so it gets first refusal on the key.
+    const target = tagConfirmButton() || firstPerson();
+    if (target) {
+      stop(event);
+      target.click();
+    }
+    return;
+  }
+
+  if (event.key === "Escape") {
+    // Escape in the description would close the whole viewer; stepping out of
+    // the field is the more useful reading while the caret is sitting in it.
+    const description = focusedDescription();
+    if (description) {
+      stop(event);
+      description.blur();
+      return;
+    }
+
+    if (!quick.on) return;
+
+    if (quick.pending) {
+      // Let Immich see it too, so its picker closes with our box.
+      clearDrawing();
+      setHint(DRAW_HINT);
+      return;
+    }
+
+    stop(event);
+    if (quick.first) {
+      clearDrawing();
+      setHint(DRAW_HINT);
+      return;
+    }
+    setQuick(false);
+    return;
+  }
+
+  if (isTyping(event.target)) return;
+  if (!document.getElementById("immich-asset-viewer")) return;
+
+  switch (event.key) {
+    case "x":
+    case "X":
+      // Only where the mode can do anything: the viewer with its info panel
+      // open, which is also where the toggle it mirrors lives.
+      if (!tagButton()) return;
+      stop(event);
+      setQuick(!quick.on);
+      return;
+
+    case "c":
+    case "C":
+      if (!document.querySelector(DESCRIPTION_SELECTOR)) return;
+      stop(event);
+      focusDescription();
+      return;
+
+    case "v":
+    case "V": {
+      // The same path as the button: it fills the field and leaves the caret at
+      // the end of it.
+      const fill = document.querySelector(`.${BUTTON_CLASS}`);
+      if (!fill) return;
+      stop(event);
+      fill.click();
+      return;
+    }
+
+    case "r":
+    case "R":
+      stop(event);
+      dismissNotifications();
+      return;
+
+    case "Backspace": {
+      const trash = trashButton();
+      if (!trash) return;
+      stop(event);
+      openConfirm({
+        title: "Confirm",
+        message: "Move this photo to the trash?",
+        confirmLabel: "Confirm",
+        cancelLabel: "Cancel",
+        onConfirm: () => trash.click(),
+      });
+      return;
+    }
+
+    default:
+      return;
+  }
 }
 
 /** Immich's tagging canvas going away means the picker closed, either way. */
@@ -707,8 +921,7 @@ window.addEventListener("resize", hideTip);
 
 document.addEventListener("click", onQuickClick, true);
 document.addEventListener("mousemove", onQuickMove, true);
-document.addEventListener("keydown", onQuickKey, true);
-document.addEventListener("keydown", onTagKey, true);
+document.addEventListener("keydown", onKey, true);
 
 new MutationObserver(schedule).observe(document.documentElement, {
   childList: true,
